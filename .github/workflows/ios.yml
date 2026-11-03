@@ -23,7 +23,9 @@ jobs:
   unsigned-ipa:
     name: Build unsigned IPA
     # Device builds need Xcode, which GitHub only provides on macOS runners.
-    runs-on: macos-15
+    # The arm64 macOS pool has been heavily constrained; the Intel pool is
+    # x86_64 (the iPhone build is still arm64) and usually starts much faster.
+    runs-on: macos-15-intel
     timeout-minutes: 45
 
     steps:

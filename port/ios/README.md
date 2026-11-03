@@ -54,7 +54,7 @@ O `.xcodeproj` é gerado pelo XcodeGen e não é versionado.
 3. Ao terminar, baixe o artifact **`CubeEvil4-ios-unsigned`**.
 4. Assine e instale no iPhone com uma conta Apple gratuita.
 
-O workflow roda em `macos-15` e executa
+O workflow roda em `macos-15-intel` (Xcode 16) e executa
 `port/ios/scripts/build-unsigned-ipa.sh`. Ele usa `CODE_SIGNING_ALLOWED=NO`, então
 não precisa de certificado nem de segredo no repositório.
 
