@@ -53,7 +53,7 @@ jobs:
           lipo -info build/ios-core/libre4.a
           file build/ios-core/libre4.a
           ls -lh build/ios-core/libre4.a
-          nm -gU build/ios-core/libre4.a | grep -E '_(make|jump)_fcontext$'
+          nm -g build/ios-core/libre4.a | grep -E '_(make|jump)_fcontext$'
 
       - name: Upload libre4.a
         if: success()

@@ -35,11 +35,11 @@ fi
 
 echo "Archive: ${ARCHIVE}"
 echo "Architectures: $(lipo -archs "${ARCHIVE}")"
-if ! nm -gU "${ARCHIVE}" 2>/dev/null | grep -q '_make_fcontext$'; then
+if ! nm -g "${ARCHIVE}" 2>/dev/null | grep -q '_make_fcontext$'; then
     echo "error: libfcontext (make_fcontext) nao esta no archive." >&2
     exit 1
 fi
-if ! nm -gU "${ARCHIVE}" 2>/dev/null | grep -q '_jump_fcontext$'; then
+if ! nm -g "${ARCHIVE}" 2>/dev/null | grep -q '_jump_fcontext$'; then
     echo "error: libfcontext (jump_fcontext) nao esta no archive." >&2
     exit 1
 fi
