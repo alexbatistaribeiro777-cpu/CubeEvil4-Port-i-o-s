@@ -493,6 +493,48 @@ def lp64_sizes(staging: Path) -> int:
     return total
 
 
+def reconcile_case(tree: Path, plan: dict) -> dict:
+    """Maps the plan's unit paths to the spelling on disk.
+
+    The original tree has two directories that differ only in case
+    (`src/tools`, 14 units, and `src/Tools`, 17), and three file names exist in
+    both with different content (t_prim.cpp, t_util.cpp, tools.cpp: different
+    builds of the debug tools). Case-insensitive file systems (macOS, Windows)
+    hold them as one directory, so the checkout keeps one of the two variants.
+    The plan names the original spelling of every unit, which does not exist
+    there; this rewrites each path to the file the build will actually compile
+    and says where two units had to share one file. On Linux the names match
+    exactly and nothing changes."""
+    on_disk = {}
+    for path in tree.rglob("*"):
+        if path.is_file():
+            rel = path.relative_to(tree).as_posix()
+            on_disk.setdefault(rel.lower(), rel)
+
+    chosen = {}
+
+    def resolve(source: str) -> str:
+        if (tree / source).is_file():
+            return source
+        found = on_disk.get(source.lower())
+        if not found:
+            sys.exit(f"module plan names a file that is not on disk: {source}")
+        chosen.setdefault(found, set()).add(source)
+        return found
+
+    fixed = dict(plan)
+    fixed["main"] = [resolve(source) for source in plan["main"]]
+    fixed["modules"] = {
+        name: {**module, "sources": [resolve(source) for source in module["sources"]]}
+        for name, module in plan["modules"].items()
+    }
+    shared = sorted(path for path, sources in chosen.items() if len(sources) > 1)
+    if shared:
+        print("whole_prepare: case-insensitive file system: " +
+              ", ".join(f"{path.rsplit('/', 1)[-1]} ({len(chosen[path])} units)" for path in shared))
+    return fixed
+
+
 def prepare(out: Path) -> Path:
     tree = out / "tree"
     staging = out / "staging"
@@ -508,6 +550,7 @@ def prepare(out: Path) -> Path:
     casts = apply_int_casts(staging)
     arcs = arc_calls(staging)
     plan = module_plan()
+    plan = reconcile_case(staging, plan)
     # Every dropped inline asm with real instructions needs a C replacement.
     found, problems = whole_asm_check.check(staging, whole_asm_check.plan_units(plan), OVERLAY)
     if problems:

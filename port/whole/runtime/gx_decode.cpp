@@ -1429,14 +1429,18 @@ inline void cpuRelax()
 {
 #if defined(__i386__) || defined(__x86_64__)
     __builtin_ia32_pause();
-#elif defined(__arm__) || defined(__aarch64__)
+#elif defined(__arm__) || defined(__aarch64__) || defined(__arm64__)
     __asm__ __volatile__("yield");
 #endif
 }
 
 void worker()
 {
+#if defined(__APPLE__)
+    pthread_setname_np("re4-gx-verts");  // Darwin takes only the name
+#else
     pthread_setname_np(pthread_self(), "re4-gx-verts");  // in profiles (simpleperf) and crash reports
+#endif
     const int slot = gWorkerTidCount.fetch_add(1);
     if (slot < 8) {
         gWorkerTids[slot].store(re4cpu::ThreadId());

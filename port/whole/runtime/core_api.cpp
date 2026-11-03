@@ -543,10 +543,12 @@ int re4_core_start_entry(int (*entry)(void))
     pthread_attr_t attr;
     pthread_attr_init(&attr);
     pthread_attr_setstacksize(&attr, 8u << 20);
-#if __SIZEOF_POINTER__ != 4
+#if __SIZEOF_POINTER__ != 4 && !defined(__APPLE__)
     // 64 bit (milestone 12): the game keeps addresses of its locals in 32-bit
     // words, so its thread's stack lies in the window below 4 GB like the
-    // stacks of the game threads (on Android nothing else puts it there)
+    // stacks of the game threads (on Android nothing else puts it there).
+    // Darwin has no pthread_attr_setstack; the iOS bring-up allocates the
+    // stacks in this window through the scheduler instead (port/ios/docs).
     if (void* stack = re4_window_map(8u << 20, PROT_READ | PROT_WRITE)) {
         pthread_attr_setstack(&attr, stack, 8u << 20);
     }
