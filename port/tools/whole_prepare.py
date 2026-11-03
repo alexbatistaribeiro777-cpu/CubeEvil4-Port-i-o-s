@@ -505,16 +505,20 @@ def reconcile_case(tree: Path, plan: dict) -> dict:
     there; this rewrites each path to the file the build will actually compile
     and says where two units had to share one file. On Linux the names match
     exactly and nothing changes."""
+    exact = set()
     on_disk = {}
     for path in tree.rglob("*"):
         if path.is_file():
             rel = path.relative_to(tree).as_posix()
+            exact.add(rel)
             on_disk.setdefault(rel.lower(), rel)
 
     chosen = {}
 
     def resolve(source: str) -> str:
-        if (tree / source).is_file():
+        # the exact spelling, not the file system's answer: on a case-insensitive
+        # volume `tree / "src/tools/x.cpp"` opens `src/Tools/x.cpp` as well
+        if source in exact:
             return source
         found = on_disk.get(source.lower())
         if not found:
