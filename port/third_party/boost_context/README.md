@@ -3,11 +3,17 @@
 Unmodified `make` and `jump` assembly from the upstream tag `boost-1.88.0`:
 https://github.com/boostorg/context/tree/boost-1.88.0/src/asm
 
-Four files only, plus the Boost Software License. Their normalized LF SHA-256
-hashes are checked by `port/cmake/ContextSources.cmake`. No Boost package,
-network fetch at build time, coroutine wrapper or gameplay code is required.
+Four ELF files for Android plus the two Mach-O files for iOS, and the Boost
+Software License. Their normalized LF SHA-256 hashes are checked by
+`port/cmake/ContextSources.cmake`. No Boost package, network fetch at build
+time, coroutine wrapper or gameplay code is required.
 The ABI declarations are from upstream `include/boost/context/detail/fcontext.hpp`.
 `port/src/stack_context.cpp` implements stack ownership and caller transfers.
+
+The Mach-O files (`make_arm64_aapcs_macho_gas.S`, `jump_arm64_aapcs_macho_gas.S`)
+are built for the iOS arm64 core. They call `__exit` when a context entry
+returns; Darwin/iOS only declare `_exit`, so `port/platform/apple/context_exit.cpp`
+provides the symbol Boost's unchanged assembly expects.
 
 ARM32 assembly is compiled with `-marm -U__SOFTFP__`, because Android's softfp
 calling convention still requires d8-d15 preservation across function calls.
@@ -18,7 +24,9 @@ Android mappings have inaccessible guard pages and RW, non-executable stacks.
 
 This integration does not support cross-thread migration, asynchronous signal
 preemption, ASan fiber hooks, PAC/BTI-enabled context entry or unwinding across
-contexts. Android's reserved x18 is never modified. Evaluate newer toolchain
-branch-protection requirements before enabling PAC/BTI, not by ignoring them.
+contexts. Android's reserved x18 is never modified. iOS builds use the `arm64`
+target, not `arm64e`, so pointer authentication is not part of the context ABI.
+Evaluate newer toolchain branch-protection requirements before enabling PAC/BTI,
+not by ignoring them.
 
 Upstream description: https://www.boost.org/doc/libs/1_88_0/libs/context/doc/html/context/overview.html

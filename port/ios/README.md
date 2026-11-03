@@ -20,6 +20,7 @@ linkado**: ao tocar em "Iniciar jogo" o app explica exatamente isso.
 | `AVAudioEngine` com puxada de PCM do core | Pronto, mudo enquanto o core não existe |
 | ABI C estável entre Swift e o core (`Core/re4_ios.h`) | Definida |
 | Núcleo C/C++ do jogo (renderer, áudio, menus, saves) | **Não integrado** |
+| Fase 1: núcleo `port/` compilado para iOS arm64 (`libre4.a`) | Pipeline pronto; ver `ios-core.yml` |
 
 O caminho para integrar o núcleo (e por que ele é grande) está em
 [`docs/core-integration.md`](docs/core-integration.md).
@@ -41,7 +42,9 @@ port/ios/
 ├── Core/                        # contrato C com o núcleo
 │   ├── re4_ios.h
 │   └── re4_ios_stub.c           # implementação provisória
+├── cmake/ios.toolchain.cmake    # CMake para o SDK de dispositivo (arm64)
 ├── scripts/build-unsigned-ipa.sh
+├── scripts/build-ios-core.sh    # núcleo -> build/ios-core/libre4.a
 └── docs/core-integration.md     # plano técnico do port do núcleo
 ```
 
@@ -78,6 +81,33 @@ profile como secrets no Actions).
 > O identificador do bundle é `com.cubeevil4.ios` em `project.yml`. Se o
 > Sideloadly reclamar de conflito, troque por algo único, por exemplo
 > `com.seunome.cubeevil4`.
+
+## Núcleo iOS — Fase 1 (`libre4.a`)
+
+O núcleo portado (`port/`) já compila para **iOS arm64** como uma biblioteca
+estática. Isso valida o toolchain, o scheduler e as partes independentes de
+Android; o app ainda não linka essa biblioteca.
+
+O workflow [`.github/workflows/ios-core.yml`](../../../.github/workflows/ios-core.yml)
+roda em `macos-15-intel` e publica o artifact **`libre4-ios-arm64`**:
+
+```sh
+bash port/ios/scripts/build-ios-core.sh
+# saída: build/ios-core/libre4.a
+lipo -archs build/ios-core/libre4.a   # arm64
+nm -gU build/ios-core/libre4.a | grep fcontext
+```
+
+O que entra no archive agora:
+
+- `re4_scheduler` + `re4_original` (scheduler do port);
+- Boost.Context **Mach-O arm64** (`make/jump_arm64_aapcs_macho_gas.S`);
+- `re4_loader`, `re4_modules`, `re4_game_runtime`, `re4_gx`, `re4_yz2`,
+  `re4_async_file`, `re4_asset_index` (o núcleo portado, sem o `port/whole`).
+
+O que ainda **não** entra: `port/whole` (main.dol + 114 módulos REL), o runtime
+de MEM1/DVD/GX e o renderer. Isso é a Fase 2 em diante; os erros reais de
+compilação para o SDK iOS aparecem no log do workflow.
 
 ## Build local (macOS)
 

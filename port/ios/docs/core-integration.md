@@ -7,6 +7,28 @@ Ele assume o fork atual (`Andiweli/CubeEvil4-Android`) e cita os arquivos reais.
 > `port/whole` para Darwin/arm64, substituir as partes específicas de Android
 > (JNI, `/proc`, `android_dlopen_ext`, link ELF) e portar a camada de UI.
 
+## 0. Fase 1 em andamento (infraestrutura)
+
+| Peça | Estado |
+| --- | --- |
+| `port/ios/cmake/ios.toolchain.cmake` (iPhoneOS, arm64, iOS 15) | Criado |
+| Backend Boost.Context **Mach-O arm64** (`make`/`jump_arm64_aapcs_macho_gas.S`) | Criado, hash oficial verificado |
+| `stack_context.cpp` compila em `__APPLE__ && __arm64__` | Sim |
+| `libre4.a` com o núcleo portado (`port/`) | Workflow `ios-core.yml` |
+| `port/whole` (main.dol + 114 módulos) para iOS | Ainda não |
+
+O workflow `ios-core.yml` compila `re4_scheduler` + `re4_original` + o núcleo
+portado (`re4_loader`, `re4_modules`, `re4_game_runtime`, `re4_gx`, ...) com o
+SDK de dispositivo e arquiva tudo em `libre4.a` via `libtool`. O objetivo desta
+fase é ter um loop de CI que mostre os erros reais do compilador iOS antes de
+mexer em `port/whole`.
+
+O que ainda bloqueia o runtime do jogo nesta fase: `port/whole` usa ELF
+(linker plan com `-fuse-ld=lld`, version-scripts, trampolins `.S`), `dlopen` de
+`libre4_*.so`, `__android_log_vprint`, `/proc/self/maps`, `fork`/`memfd_create`.
+Essas peças precisam de um branch Apple antes que `port/whole` entre no
+`libre4.a`.
+
 ## 1. Por que não é só "recompilar"
 
 O port Android não usa JNI só como cola: ele depende de escolhas do linker ELF e
@@ -207,10 +229,10 @@ documentos só nisso, ver `port/docs/`).
 ## 6. Ordem recomendada de PRs
 
 1. `port/ios` (este PR): shell + CI.
-2. Toolchain iOS + scheduler arm64 (compila um executável de teste que troca de
-   contexto).
-3. Runtime mínimo: log, MEM1, `re4_core_reserve` + `re4_core_start` com dados
-   reais, sem renderer (logs no console).
+2. Toolchain iOS + scheduler arm64 + `libre4.a` (em andamento; `ios-core.yml`).
+3. `port/whole` sob Darwin: loader/link estático, log, `/proc`, MEM1; primeiro
+   `re4_core_reserve` + `re4_core_start` com dados reais, sem renderer (logs no
+   console).
 4. Scheduler + jogo rodando a primeira sala em modo headless.
 5. Renderer GLES 3 no `GameGLView`.
 6. Áudio.

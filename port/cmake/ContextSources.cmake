@@ -1,6 +1,21 @@
-# The four assembly files are unchanged Boost.Context 1.88.0 sources.
+# The assembly files are unchanged Boost.Context 1.88.0 sources.
+#   *_aapcs_elf_gas.S   Android (armeabi-v7a, arm64-v8a)
+#   *_aapcs_macho_gas.S Apple (arm64; the iOS core)
 function(re4_add_context_sources target)
     set(base "third_party/boost_context")
+    if(APPLE)
+        if(NOT CMAKE_SYSTEM_PROCESSOR MATCHES "^(arm64|aarch64)$")
+            message(FATAL_ERROR "No verified fcontext backend for Apple ${CMAKE_SYSTEM_PROCESSOR}")
+        endif()
+        re4_check_original("${CMAKE_CURRENT_SOURCE_DIR}" "${base}/make_arm64_aapcs_macho_gas.S"
+            70f07951a0bd02415f8c36b0fec2007f6cd33f1e121e569396d313a637d399dd)
+        re4_check_original("${CMAKE_CURRENT_SOURCE_DIR}" "${base}/jump_arm64_aapcs_macho_gas.S"
+            948981fc56f53c319e709f17212d1b9c7a202c59ed3767a5b361cb5fa2b81f12)
+        target_sources(${target} PRIVATE
+            "${base}/make_arm64_aapcs_macho_gas.S"
+            "${base}/jump_arm64_aapcs_macho_gas.S")
+        return()
+    endif()
     re4_check_original("${CMAKE_CURRENT_SOURCE_DIR}" "${base}/jump_arm_aapcs_elf_gas.S"
         7a9c50f5178778b4f920c7091235e9ea4fb9329ed73bd25d756bc4f36e335320)
     re4_check_original("${CMAKE_CURRENT_SOURCE_DIR}" "${base}/make_arm_aapcs_elf_gas.S"

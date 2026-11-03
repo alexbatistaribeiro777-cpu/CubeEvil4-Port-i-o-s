@@ -1,0 +1,74 @@
+name: iOS core build
+
+# Phase-1 gate of the iOS port: compile the ported core (scheduler + Mach-O
+# fcontext + the port/ native foundation) for arm64 iOS and archive it as
+# libre4.a. Nothing is linked into the app yet; this job surfaces the real
+# compiler errors from the iPhoneOS SDK.
+on:
+  push:
+    branches: [master, main]
+    paths:
+      - 'port/**'
+      - '.github/workflows/ios-core.yml'
+  pull_request:
+    paths:
+      - 'port/**'
+      - '.github/workflows/ios-core.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-core-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  libre4:
+    name: Build libre4.a (arm64)
+    # The macOS arm64 pool is heavily constrained; the Intel pool is x86_64,
+    # while the produced archive is still arm64 for the device.
+    runs-on: macos-15-intel
+    timeout-minutes: 180
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Show toolchain
+        run: |
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-version
+          cmake --version
+          sw_vers
+
+      - name: Build iOS core archive
+        run: |
+          set -o pipefail
+          bash port/ios/scripts/build-ios-core.sh 2>&1 | tee ios-core-build.log
+
+      - name: Inspect archive
+        if: success()
+        run: |
+          lipo -info build/ios-core/libre4.a
+          file build/ios-core/libre4.a
+          ls -lh build/ios-core/libre4.a
+          nm -gU build/ios-core/libre4.a | grep -E '_(make|jump)_fcontext$'
+
+      - name: Upload libre4.a
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: libre4-ios-arm64
+          path: build/ios-core/libre4.a
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-core-build-log
+          path: ios-core-build.log
+          if-no-files-found: ignore
+          retention-days: 14

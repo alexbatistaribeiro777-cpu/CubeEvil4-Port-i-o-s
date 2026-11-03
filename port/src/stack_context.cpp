@@ -7,9 +7,12 @@
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 #include <windows.h>
-#elif defined(__ANDROID__) || (defined(__linux__) && (defined(__arm__) || defined(__aarch64__)))
-// Android, and the Linux ARM test builds of the whole-program port (run under
-// qemu), share the Boost.Context assembly.
+#elif defined(__ANDROID__) || (defined(__linux__) && (defined(__arm__) || defined(__aarch64__))) \
+    || (defined(__APPLE__) && (defined(__arm64__) || defined(__aarch64__)))
+// Android, the Linux ARM test builds of the whole-program port (run under
+// qemu), and the iOS arm64 core share the Boost.Context API. The assembly
+// behind it is ELF on Linux/Android and Mach-O on Apple
+// (port/cmake/ContextSources.cmake selects the files).
 #include <sys/mman.h>
 #include <unistd.h>
 #include <cerrno>

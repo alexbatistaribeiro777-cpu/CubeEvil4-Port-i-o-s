@@ -226,8 +226,16 @@ if(ANDROID)
     enable_language(ASM)
     include(cmake/ContextSources.cmake)
     re4_add_context_sources(re4_scheduler)
+elseif(APPLE)
+    if(NOT CMAKE_SYSTEM_PROCESSOR MATCHES "^(arm64|aarch64)$")
+        message(FATAL_ERROR "iOS scheduler requires arm64, not ${CMAKE_SYSTEM_PROCESSOR}")
+    endif()
+    enable_language(ASM)
+    include(cmake/ContextSources.cmake)
+    re4_add_context_sources(re4_scheduler)
+    target_sources(re4_scheduler PRIVATE platform/apple/context_exit.cpp)
 elseif(NOT WIN32)
-    message(FATAL_ERROR "Scheduler currently supports Android ARM32/ARM64 and Windows hosts")
+    message(FATAL_ERROR "Scheduler currently supports Android ARM32/ARM64, iOS arm64 and Windows hosts")
 endif()
 if(MSVC)
     target_compile_options(re4_scheduler PRIVATE /W4 /WX /fp:strict)
@@ -521,4 +529,29 @@ if(ANDROID)
         platform/android/graphics_jni.cpp platform/android/vulkan_bootstrap.cpp)
     target_link_libraries(re4_port_jni PRIVATE re4_verification re4_module_verification re4_game_verification re4_gx re4_loader log android dl)
     target_link_options(re4_port_jni PRIVATE -Wl,--no-undefined)
+endif()
+
+# --- iOS core archive (phase 1) ----------------------------------------------------
+# The iOS app links one static library. The targets above are archives of their
+# own (the Android build links them as shared objects); libtool merges them into
+# a single Mach-O arm64 archive the Xcode project can consume later. Building
+# this target is the phase-1 gate: the scheduler, its Mach-O fcontext backend
+# and the whole ported core have to compile for the iOS SDK.
+if(APPLE)
+    set(RE4_IOS_CORE_LIBS
+        re4_original re4_scheduler re4_yz2 re4_async_file re4_asset_index
+        re4_loader re4_modules re4_game_runtime re4_gx)
+    find_program(RE4_LIBTOOL NAMES libtool REQUIRED)
+    set(RE4_IOS_CORE_ARCHIVE "${CMAKE_BINARY_DIR}/libre4.a")
+    set(RE4_IOS_CORE_INPUTS "")
+    foreach(lib IN LISTS RE4_IOS_CORE_LIBS)
+        list(APPEND RE4_IOS_CORE_INPUTS "$<TARGET_FILE:${lib}>")
+    endforeach()
+    add_custom_command(
+        OUTPUT "${RE4_IOS_CORE_ARCHIVE}"
+        COMMAND "${RE4_LIBTOOL}" -static -o "${RE4_IOS_CORE_ARCHIVE}" ${RE4_IOS_CORE_INPUTS}
+        DEPENDS ${RE4_IOS_CORE_LIBS}
+        COMMENT "Archiving libre4.a for iOS (arm64)"
+        VERBATIM)
+    add_custom_target(re4_ios_core ALL DEPENDS "${RE4_IOS_CORE_ARCHIVE}")
 endif()
