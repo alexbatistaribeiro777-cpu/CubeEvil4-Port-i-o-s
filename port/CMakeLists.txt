@@ -11,6 +11,14 @@ if(ANDROID)
     add_compile_options("$<$<CONFIG:Debug>:-O2>")
 endif()
 
+if(APPLE)
+    # The iPhoneOS SDK marks sprintf and friends deprecated. The original game
+    # code (including the generated control files) formats into fixed buffers
+    # on purpose; rewriting those bodies would break the "original code
+    # unchanged" rule. Deprecation stays visible as a warning on Apple builds.
+    add_compile_options(-Wno-deprecated-declarations)
+endif()
+
 get_filename_component(RE4_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/.." ABSOLUTE)
 include(cmake/OriginalSources.cmake)
 re4_prepare_original_sources("${RE4_ROOT}" "${CMAKE_CURRENT_BINARY_DIR}/original")
