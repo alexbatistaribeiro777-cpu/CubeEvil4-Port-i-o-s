@@ -35,11 +35,15 @@ fi
 
 echo "Archive: ${ARCHIVE}"
 echo "Architectures: $(lipo -archs "${ARCHIVE}")"
-if ! nm -g "${ARCHIVE}" 2>/dev/null | grep -q '_make_fcontext$'; then
+# Capture the symbol table first: `nm | grep -q` would let grep exit early,
+# SIGPIPE nm and fail this script under `set -o pipefail` even on a match.
+NM_OUT="${BUILD_DIR}/libre4.nm.txt"
+nm -g "${ARCHIVE}" > "${NM_OUT}" 2>/dev/null
+if ! grep -q '_make_fcontext$' "${NM_OUT}"; then
     echo "error: libfcontext (make_fcontext) nao esta no archive." >&2
     exit 1
 fi
-if ! nm -g "${ARCHIVE}" 2>/dev/null | grep -q '_jump_fcontext$'; then
+if ! grep -q '_jump_fcontext$' "${NM_OUT}"; then
     echo "error: libfcontext (jump_fcontext) nao esta no archive." >&2
     exit 1
 fi
