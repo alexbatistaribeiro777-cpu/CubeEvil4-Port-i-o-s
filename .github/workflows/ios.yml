@@ -1,0 +1,60 @@
+name: iOS build
+
+on:
+  push:
+    branches: [master, main]
+    paths:
+      - 'port/ios/**'
+      - '.github/workflows/ios.yml'
+  pull_request:
+    paths:
+      - 'port/ios/**'
+      - '.github/workflows/ios.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  unsigned-ipa:
+    name: Build unsigned IPA
+    # Device builds need Xcode, which GitHub only provides on macOS runners.
+    runs-on: macos-15
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Show toolchain
+        run: |
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-version
+          sw_vers
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Build and package
+        run: bash port/ios/scripts/build-unsigned-ipa.sh
+
+      - name: Upload unsigned IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: CubeEvil4-ios-unsigned
+          path: port/ios/build/ipa/CubeEvil4-unsigned.ipa
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload build log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: CubeEvil4-ios-xcodebuild-log
+          path: port/ios/build/xcodebuild.log
+          if-no-files-found: ignore
+          retention-days: 7

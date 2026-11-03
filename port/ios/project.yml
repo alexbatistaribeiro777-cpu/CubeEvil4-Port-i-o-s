@@ -1,0 +1,72 @@
+# XcodeGen specification for the CubeEvil4 iOS shell.
+#
+# The .xcodeproj is generated, never committed:
+#   brew install xcodegen
+#   cd port/ios && xcodegen generate
+#
+# CI does the same on a macOS runner; see ../../.github/workflows/ios.yml.
+name: CubeEvil4
+
+options:
+  bundleIdPrefix: com.cubeevil4
+  deploymentTarget:
+    iOS: "15.0"
+  createIntermediateGroups: true
+  groupSortPosition: top
+
+configs:
+  Debug: debug
+  Release: release
+
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    IPHONEOS_DEPLOYMENT_TARGET: "15.0"
+    TARGETED_DEVICE_FAMILY: "1,2"
+    CODE_SIGN_STYLE: Automatic
+    DEVELOPMENT_TEAM: ""
+    CLANG_ENABLE_MODULES: YES
+    CLANG_CXX_LANGUAGE_STANDARD: c++17
+    GCC_C_LANGUAGE_STANDARD: gnu17
+    ENABLE_BITCODE: NO
+
+targets:
+  CubeEvil4:
+    type: application
+    platform: iOS
+    deploymentTarget: "15.0"
+    sources:
+      - path: CubeEvil4
+      - path: Core
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.cubeevil4.ios
+        PRODUCT_NAME: CubeEvil4
+        INFOPLIST_FILE: Info.plist
+        SWIFT_OBJC_BRIDGING_HEADER: CubeEvil4/CubeEvil4-Bridging-Header.h
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        MARKETING_VERSION: "0.1.0"
+        CURRENT_PROJECT_VERSION: "1"
+        HEADER_SEARCH_PATHS:
+          - $(inherited)
+          - $(SRCROOT)/Core
+        LD_RUNPATH_SEARCH_PATHS:
+          - $(inherited)
+          - "@executable_path/Frameworks"
+        OTHER_LDFLAGS:
+          - $(inherited)
+          - "-lz"
+    dependencies:
+      - sdk: OpenGLES.framework
+      - sdk: GameController.framework
+      - sdk: AVFoundation.framework
+
+schemes:
+  CubeEvil4:
+    build:
+      targets:
+        CubeEvil4: all
+    run:
+      config: Debug
+    archive:
+      config: Release
