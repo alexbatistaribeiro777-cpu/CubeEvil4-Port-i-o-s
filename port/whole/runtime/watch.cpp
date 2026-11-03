@@ -11,6 +11,16 @@
 // no debug registers) it says so once and does nothing.
 #include "re4_runtime.h"
 
+#if defined(__APPLE__)
+#include <dlfcn.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <signal.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <string.h>
+#include <unistd.h>
+#else
 #include <dlfcn.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -22,6 +32,7 @@
 #include <sys/syscall.h>
 #include <ucontext.h>
 #include <unistd.h>
+#endif
 
 #if defined(__linux__) && __has_include(<linux/hw_breakpoint.h>)
 #include <linux/hw_breakpoint.h>

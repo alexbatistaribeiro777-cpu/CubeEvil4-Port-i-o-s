@@ -41,10 +41,17 @@ extern "C" int re4_mem1_init(void)
         return 1;
     }
     void* want = (void*) (unsigned long) RE4_MEM1_BASE;
+#if defined(__APPLE__)
+    // Darwin has no MAP_FIXED_NOREPLACE. A non-NULL address is only a hint
+    // there, so request the range without MAP_FIXED, check that it was honoured
+    // and give back anything else instead of overwriting an existing mapping.
+    void* p = mmap(want, RE4_MEM1_SIZE, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+#else
     // The Linux loader (host/loader.c) holds the range with an inaccessible
     // placeholder of its own; then MEM1 replaces it.
     int fixed = getenv("RE4_MEM1_PLACEHOLDER") ? MAP_FIXED : MAP_FIXED_NOREPLACE;
     void* p = mmap(want, RE4_MEM1_SIZE, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | fixed, -1, 0);
+#endif
     if (p != want) {
         // Old kernels ignore MAP_FIXED_NOREPLACE and treat the address as a hint.
         re4_log("MEM1: cannot reserve 0x%08x..0x%08x (got %p)", RE4_MEM1_BASE,

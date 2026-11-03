@@ -10,6 +10,17 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 get_filename_component(RE4_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../.." ABSOLUTE)
 find_package(Python3 3.9 REQUIRED COMPONENTS Interpreter)
 
+# The Android build links a shared `libre4_main.so` plus one shared library per
+# REL module, planned by port/tools/whole_link_plan.py (ELF trampolines,
+# --version-script, -Bsymbolic, -fuse-ld=lld). iOS has neither lld nor dlopen of
+# those modules, and the app links one Mach-O binary instead. On iOS this option
+# compiles every whole-program unit into a single static archive so the SDK
+# reports the real compile errors; linking stays with the Xcode app target.
+option(RE4_WHOLE_LINK "Build the ELF link plan and the shared-library targets" ON)
+if(APPLE AND CMAKE_SYSTEM_NAME STREQUAL "iOS")
+    set(RE4_WHOLE_LINK OFF)
+endif()
+
 if(CMAKE_SYSTEM_PROCESSOR MATCHES "^(i.86|x86)$")
     set(RE4_ARCH i686)
 elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "^(armv7.*|arm)$")
@@ -34,10 +45,11 @@ endif()
 # long build path overflowed it. Game units become "src/game/x.cpp" (the more
 # specific prefix of the prepared tree wins), port code "port/whole/...".
 add_compile_options("-fmacro-prefix-map=${RE4_ROOT}/=")
-if(NOT ANDROID)
+if(NOT ANDROID AND NOT APPLE)
     # 64-bit file interfaces for the 32-bit Linux test builds: readdir and
     # stat fail (EOVERFLOW) on file systems with 64-bit inode numbers (WSL's
-    # Windows drives, qemu-arm on a 64-bit host) without them.
+    # Windows drives, qemu-arm on a 64-bit host) without them. Darwin has
+    # 64-bit ino_t always and ignores this macro.
     add_compile_definitions(_FILE_OFFSET_BITS=64)
 endif()
 # Optimisation (the Android build uses 2, port/tools/whole_build_android.sh;
@@ -225,11 +237,21 @@ add_library(re4_platform_obj OBJECT
 target_include_directories(re4_platform_obj PUBLIC runtime PRIVATE "${RE4_ROOT}/port/src")
 target_compile_features(re4_platform_obj PRIVATE cxx_std_17)
 if(RE4_ARCH STREQUAL "arm64")
-    # Stack switching: the Boost.Context assembly of the app's arm64 build
-    set(RE4_FCONTEXT
-        "${RE4_ROOT}/port/third_party/boost_context/make_arm64_aapcs_elf_gas.S"
-        "${RE4_ROOT}/port/third_party/boost_context/jump_arm64_aapcs_elf_gas.S")
-    target_sources(re4_platform_obj PRIVATE ${RE4_FCONTEXT})
+    if(APPLE)
+        # Stack switching: the Boost.Context Mach-O assembly of the iOS app.
+        # The same files (and hashes) the core archive uses, see
+        # port/cmake/ContextSources.cmake.
+        add_library(re4_context_obj OBJECT
+            "${RE4_ROOT}/port/third_party/boost_context/make_arm64_aapcs_macho_gas.S"
+            "${RE4_ROOT}/port/third_party/boost_context/jump_arm64_aapcs_macho_gas.S"
+            "${RE4_ROOT}/port/platform/apple/context_exit.cpp")
+    else()
+        # Stack switching: the Boost.Context assembly of the app's arm64 build
+        set(RE4_FCONTEXT
+            "${RE4_ROOT}/port/third_party/boost_context/make_arm64_aapcs_elf_gas.S"
+            "${RE4_ROOT}/port/third_party/boost_context/jump_arm64_aapcs_elf_gas.S")
+        target_sources(re4_platform_obj PRIVATE ${RE4_FCONTEXT})
+    endif()
 endif()
 if(RE4_ARCH STREQUAL "armv7")
     # Stack switching: the Boost.Context assembly of the Android build
@@ -431,6 +453,7 @@ foreach(i RANGE ${last_module})
 endforeach()
 
 # --- link plan: stubs, module table, cross-module trampolines ------------------
+if(RE4_WHOLE_LINK)
 set(RE4_GEN "${CMAKE_CURRENT_BINARY_DIR}/generated")
 file(GENERATE OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/link_objects.txt" CONTENT "${RE4_LINK_OBJECTS}")
 set(RE4_GEN_FILES "${RE4_GEN}/stubs.cpp" "${RE4_GEN}/modules.cpp" "${RE4_GEN}/link_report.json")
@@ -645,4 +668,31 @@ if(NOT ANDROID)
     target_include_directories(re4_format_compare PRIVATE tests/format_compare)
     target_link_options(re4_format_compare PRIVATE -fuse-ld=lld)
     target_link_libraries(re4_format_compare PRIVATE re4_app_readers re4_platform)
+endif()
+
+else()
+    # --- iOS: one static archive with every whole-program unit ---------------------
+    # No generated stubs, module table or cross-module trampolines: those belong
+    # to the ELF link plan. The iOS app links this archive into the single Mach-O
+    # binary, so the platform layer, the game's main.dol units and all 114 REL
+    # modules become ordinary object files of one process.
+    set(RE4_WHOLE_OBJECTS
+        $<TARGET_OBJECTS:re4_main_obj>
+        $<TARGET_OBJECTS:re4_gamehooks_obj>
+        $<TARGET_OBJECTS:re4_glue_obj>
+        $<TARGET_OBJECTS:re4_cri_obj>
+        $<TARGET_OBJECTS:re4_card_obj>
+        $<TARGET_OBJECTS:re4_platform_obj>
+        $<TARGET_OBJECTS:re4_formats_obj>
+        $<TARGET_OBJECTS:re4_sdk_obj>
+        $<TARGET_OBJECTS:re4_reuse_obj>)
+    if(TARGET re4_context_obj)
+        list(APPEND RE4_WHOLE_OBJECTS $<TARGET_OBJECTS:re4_context_obj>)
+    endif()
+    foreach(mod IN LISTS RE4_MODULES)
+        list(APPEND RE4_WHOLE_OBJECTS "$<TARGET_OBJECTS:re4_mod_${mod}_obj>")
+    endforeach()
+    add_library(re4_whole STATIC ${RE4_WHOLE_OBJECTS})
+    target_include_directories(re4_whole PRIVATE runtime)
+    set_target_properties(re4_whole PROPERTIES OUTPUT_NAME re4_whole)
 endif()

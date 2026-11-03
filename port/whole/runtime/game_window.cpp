@@ -16,7 +16,7 @@
 #include <sys/mman.h>
 #include <unistd.h>
 
-#ifndef MAP_FIXED_NOREPLACE
+#if !defined(__APPLE__) && !defined(MAP_FIXED_NOREPLACE)
 #define MAP_FIXED_NOREPLACE 0x100000
 #endif
 
@@ -29,6 +29,7 @@ const unsigned long kWindowEnd = RE4_WINDOW_END;
 pthread_mutex_t gWindowLock = PTHREAD_MUTEX_INITIALIZER;
 unsigned long gCursor = kWindowStart;
 
+#if !defined(__APPLE__)
 // The first free range of `size` bytes in [from, kWindowEnd), 0 if none
 // (from /proc/self/maps, sorted by address).
 unsigned long findFree(unsigned long from, unsigned long size)
@@ -55,6 +56,7 @@ unsigned long findFree(unsigned long from, unsigned long size)
     fclose(f);
     return at + size <= kWindowEnd ? at : 0;
 }
+#endif
 
 }  // namespace
 #endif
@@ -66,6 +68,36 @@ extern "C" void* re4_window_map(unsigned long size, int prot)
 #if __SIZEOF_POINTER__ == 4
     void* p = mmap(0, size, prot, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
     return p == MAP_FAILED ? 0 : p;
+#elif defined(__APPLE__)
+    // Darwin has neither /proc/self/maps nor MAP_FIXED_NOREPLACE. A non-NULL
+    // address is a hint; accept the result only if it stayed below 4 GB, where
+    // the game's 32-bit address arithmetic works. The app binary itself lives
+    // at and above 4 GB, so this window is normally free.
+    pthread_mutex_lock(&gWindowLock);
+    void* result = 0;
+    for (int tries = 0; tries < 64 && !result; tries++) {
+        void* want = (void*) gCursor;
+        void* p = mmap(want, size, prot, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+        if (p == MAP_FAILED) {
+            break;
+        }
+        if ((unsigned long) p >= RE4_WINDOW_START &&
+            (unsigned long) p + size <= 0x100000000UL) {
+            result = p;
+            gCursor = ((unsigned long) p + size + page - 1) & ~(page - 1);
+        } else {
+            munmap(p, size);
+            gCursor += page;
+        }
+        if (gCursor + size > RE4_WINDOW_END) {
+            break;
+        }
+    }
+    pthread_mutex_unlock(&gWindowLock);
+    if (!result) {
+        re4_log("window: no room for %lu KB below 4 GB", size >> 10);
+    }
+    return result;
 #else
     pthread_mutex_lock(&gWindowLock);
     void* result = 0;
@@ -108,7 +140,13 @@ extern "C" void* re4_window_map(unsigned long size, int prot)
 // it, which the report of a first device run shows).
 extern "C" void re4_window_report(void)
 {
-#if __SIZEOF_POINTER__ != 4
+#if defined(__APPLE__)
+    // No /proc/self/maps on Darwin. The log line still shows the cursor the
+    // allocator starts from; a full mach_vm_region walk comes with the device
+    // bring-up, where it matters.
+    re4_log("window 0x%lx..0x%lx: Darwin, allocation hint 0x%lx", RE4_WINDOW_START, RE4_WINDOW_END,
+            gCursor);
+#elif __SIZEOF_POINTER__ != 4
     FILE* f = fopen("/proc/self/maps", "r");
     if (!f) {
         return;

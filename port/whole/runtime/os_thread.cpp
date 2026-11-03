@@ -25,11 +25,15 @@
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
+#if !defined(__APPLE__)
 #include <link.h>
+#else
+#include <dlfcn.h>
+#endif
 #include <stdint.h>
 #include <string.h>
 #include <unistd.h>
-#if !defined(__ANDROID__)
+#if !defined(__ANDROID__) && !defined(__APPLE__)
 #include <execinfo.h>
 #define RE4_WAIT_TRACE_SUPPORTED 1
 #endif
@@ -740,6 +744,15 @@ int re4_valid_port_ptr(const void* p)
         uintptr_t address, begin, end;
         bool found;
     } search = {a, 0, 0, false};
+#if defined(__APPLE__)
+    // iOS links the whole core into the app's single Mach-O image: there is no
+    // dl_iterate_phdr and no dlopened libre4_*.so whose spans could be looked
+    // up. dladdr reports the image that contains an address (its symbol name
+    // may be NULL), which is the same question.
+    Dl_info info;
+    (void) search;
+    return dladdr(p, &info) != 0;
+#else
     dl_iterate_phdr(
         [](struct dl_phdr_info* info, size_t, void* data) -> int {
             Search* s = (Search*) data;
@@ -777,6 +790,7 @@ int re4_valid_port_ptr(const void* p)
         spanCount++;
     }
     return 1;
+#endif
 }
 
 }  // extern "C"

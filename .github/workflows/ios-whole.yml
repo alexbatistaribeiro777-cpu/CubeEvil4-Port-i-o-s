@@ -1,0 +1,71 @@
+name: iOS whole-program build
+
+# Phase-2 gate: compile main.dol units + the 114 REL modules for arm64 iOS and
+# archive them as libre4_whole.a. This surfaces the Darwin-specific compile
+# errors of the game code. The archive is not linked into the app yet.
+on:
+  push:
+    branches: [master, main]
+    paths:
+      - 'port/**'
+      - '.github/workflows/ios-whole.yml'
+  pull_request:
+    paths:
+      - 'port/**'
+      - '.github/workflows/ios-whole.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-whole-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  whole:
+    name: Build libre4_whole.a (arm64)
+    runs-on: macos-15-intel
+    timeout-minutes: 240
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Show toolchain
+        run: |
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-version
+          cmake --version
+          python3 --version
+          sw_vers
+
+      - name: Build iOS whole-program archive
+        run: |
+          set -o pipefail
+          bash port/ios/scripts/build-ios-whole.sh 2>&1 | tee ios-whole-build.log
+
+      - name: Inspect archive
+        if: success()
+        run: |
+          lipo -info build/ios-whole/libre4_whole.a
+          file build/ios-whole/libre4_whole.a
+          ls -lh build/ios-whole/libre4_whole.a
+
+      - name: Upload libre4_whole.a
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: libre4-whole-ios-arm64
+          path: build/ios-whole/libre4_whole.a
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-whole-build-log
+          path: ios-whole-build.log
+          if-no-files-found: ignore
+          retention-days: 14

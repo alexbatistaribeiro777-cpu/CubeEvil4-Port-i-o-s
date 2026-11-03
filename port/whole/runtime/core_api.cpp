@@ -17,7 +17,9 @@
 #include <strings.h>
 #include <pthread.h>
 #include <sys/mman.h>
+#if !defined(__APPLE__)
 #include <sys/syscall.h>
+#endif
 #include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -155,7 +157,15 @@ volatile int gGameTid;
 
 void* gameThread(void*)
 {
+#if defined(__APPLE__)
+    // Darwin has no gettid; the hang report only needs an id that identifies
+    // this thread in the process.
+    uint64_t tid = 0;
+    pthread_threadid_np(NULL, &tid);
+    gGameTid = (int) tid;
+#else
     gGameTid = (int) syscall(SYS_gettid);
+#endif
     re4_log("core: starting the game");
     int ret = re4_os_run(gEntry);
     char text[64];

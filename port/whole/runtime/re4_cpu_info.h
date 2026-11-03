@@ -10,16 +10,44 @@
 
 #include <dlfcn.h>
 #include <errno.h>
+#include <pthread.h>
 #include <sched.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#if !defined(__APPLE__)
 #include <sys/syscall.h>
+#endif
 #include <time.h>
 #include <unistd.h>
 
 namespace re4cpu {
+
+#if defined(__APPLE__)
+// Darwin has no Linux affinity API (cpu_set_t, sched_getaffinity). The
+// performance calls below compile but do nothing on iOS: GetLayout() finds no
+// /sys clock files, so no thread is moved. The types still have to exist for
+// runtime/gx_decode.cpp, which is shared with Android.
+typedef struct {
+    unsigned long bits[16];
+} cpu_set_t;
+#define CPU_SETSIZE 1024
+#define CPU_ZERO(s) memset((s), 0, sizeof(*(s)))
+#define CPU_SET(c, s) ((s)->bits[(c) / 64] |= 1ul << ((c) % 64))
+#define CPU_ISSET(c, s) (((s)->bits[(c) / 64] >> ((c) % 64)) & 1ul)
+#define CPU_EQUAL(a, b) (memcmp((a), (b), sizeof(*(a))) == 0)
+inline int sched_getaffinity(pid_t, size_t, cpu_set_t*)
+{
+    errno = ENOSYS;
+    return -1;
+}
+inline int sched_setaffinity(pid_t, size_t, const cpu_set_t*)
+{
+    errno = ENOSYS;
+    return -1;
+}
+#endif
 
 // processor time of the calling thread in ns
 inline long long ThreadNs()
@@ -134,7 +162,13 @@ struct ThreadUse {
         if (lastNs) {
             cpuNs += now - lastNs;
             pictures++;
+#if defined(__APPLE__)
+            // Darwin has no sched_getcpu; the clock layout is unreadable there
+            // anyway ("clocks not readable"), so the kind stays "fast".
+            lastCpu = -1;
+#else
             lastCpu = sched_getcpu();
+#endif
             onKind[GetLayout().Kind(lastCpu)]++;
         }
         lastNs = now;
@@ -168,7 +202,13 @@ struct ThreadUse {
 // the calling thread's id (as the system's tools and the performance hint name it)
 inline int ThreadId()
 {
+#if defined(__APPLE__)
+    uint64_t tid = 0;
+    pthread_threadid_np(NULL, &tid);
+    return static_cast<int>(tid);
+#else
     return static_cast<int>(syscall(SYS_gettid));
+#endif
 }
 
 // The cores KeepOffSlowCores gave the calling thread (KeepOnFastCores puts it back there).
