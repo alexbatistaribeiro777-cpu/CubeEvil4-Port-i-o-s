@@ -539,7 +539,30 @@ def reconcile_case(tree: Path, plan: dict) -> dict:
     return fixed
 
 
-def prepare(out: Path) -> Path:
+MACHO_SECTION = re.compile(r'\s*__attribute__\s*\(\(\s*section\s*\(\s*"[^"]*"\s*\)\s*\)\)')
+
+
+def macho_sections(staging: Path) -> int:
+    """Drops ELF section attributes for a Mach-O target.
+
+    `static X v __attribute__((section(".sdata"))) = ...;` (src/game/motion.cpp)
+    names an ELF section; for Mach-O clang wants "segment,section" and stops.
+    The attribute only places the object in a writable data section, which it
+    is without it, so the Mach-O build drops it. The prepared tree keeps the
+    original line for the ELF builds."""
+    done = 0
+    for path in staging.rglob("*"):
+        if path.suffix not in TEXT_SUFFIXES or not path.is_file():
+            continue
+        text = path.read_text(encoding="utf-8", errors="surrogateescape")
+        new, n = MACHO_SECTION.subn("", text)
+        if n:
+            path.write_text(new, encoding="utf-8", errors="surrogateescape")
+            done += n
+    return done
+
+
+def prepare(out: Path, macho: bool = False) -> Path:
     tree = out / "tree"
     staging = out / "staging"
     if staging.exists():
@@ -549,6 +572,7 @@ def prepare(out: Path) -> Path:
     exact_width_types(staging)
     fixed = fixed_form_structs(staging)
     apply_patches(staging)
+    sections = macho_sections(staging) if macho else 0
     sizes = lp64_sizes(staging)
     views = apply_byte_views(staging)
     casts = apply_int_casts(staging)
@@ -562,6 +586,8 @@ def prepare(out: Path) -> Path:
     print(f"whole_prepare: asm {whole_asm_check.summary(found)}; {views} byte views; "
           f"{fixed} fixed-form pointer members; {sizes} LP64 work sizes; {casts} signed casts to pointers; "
           f"{arcs} acosf/asinf calls guarded")
+    if macho:
+        print(f"whole_prepare: Mach-O, {sections} ELF section attributes dropped")
     sync(staging, tree)
     shutil.rmtree(staging)
     write_sdk_c_only(out)
@@ -581,8 +607,10 @@ def prepare(out: Path) -> Path:
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", type=Path, required=True)
+    ap.add_argument("--macho", action="store_true",
+                    help="target Mach-O: drop ELF section attributes and match file names case-insensitively")
     args = ap.parse_args()
-    prepare(args.out)
+    prepare(args.out, args.macho)
     return 0
 
 

@@ -134,8 +134,15 @@ endif()
 
 # --- prepared original sources -------------------------------------------------
 set(RE4_PREPARED "${CMAKE_CURRENT_BINARY_DIR}/prepared")
+if(APPLE)
+    # Mach-O: no ELF section attributes, and the checkout has one of src/tools
+    # and src/Tools (case-insensitive volume)
+    set(RE4_PREPARE_FLAGS --macho)
+else()
+    set(RE4_PREPARE_FLAGS "")
+endif()
 execute_process(
-    COMMAND "${Python3_EXECUTABLE}" "${RE4_ROOT}/port/tools/whole_prepare.py" --out "${RE4_PREPARED}"
+    COMMAND "${Python3_EXECUTABLE}" "${RE4_ROOT}/port/tools/whole_prepare.py" --out "${RE4_PREPARED}" ${RE4_PREPARE_FLAGS}
     RESULT_VARIABLE prepare_result)
 if(NOT prepare_result EQUAL 0)
     message(FATAL_ERROR "whole_prepare.py failed")
